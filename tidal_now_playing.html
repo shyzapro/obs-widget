@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Tidal Now Playing - OBS Widget</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: transparent;
+    font-family: 'DM Sans', sans-serif;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+    padding: 10px;
+    overflow: hidden;
+  }
+
+  .widget {
+    background: rgba(20, 10, 30, 0.75);
+    border: 1px solid rgba(160, 100, 220, 0.35);
+    border-radius: 14px;
+    padding: 13px 16px;
+    display: flex;
+    align-items: center;
+    gap: 13px;
+    min-width: 300px;
+    max-width: 400px;
+    position: relative;
+    overflow: hidden;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+  }
+
+  .widget::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(160, 100, 220, 0.35)rgba(160,100,220,0.8), transparent);
+  }
+
+  /* ---------- COVER ---------- */
+  .cover-wrap { position: relative; flex-shrink: 0; }
+
+  .cover {
+    width: 54px;
+    height: 54px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #004e64, #0077B6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .cover img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+    display: none;
+  }
+
+  .cover img.loaded { display: block; }
+
+  .cover-icon {
+    font-size: 20px;
+    opacity: 0.4;
+  }
+
+  .tidal-badge {
+    position: absolute;
+    bottom: -4px; right: -4px;
+    width: 17px; height: 17px;
+    background: #a855f7;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .tidal-badge svg {
+    width: 10px; height: 10px;
+    fill: white;
+  }
+
+  /* ---------- INFO ---------- */
+  .info { flex: 1; min-width: 0; }
+
+  .now-playing-tag {
+    font-size: 9px;
+    color: #a855f7;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    font-weight: 600;
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .pulse {
+    width: 5px; height: 5px;
+    background: #a855f7;
+    border-radius: 50%;
+    animation: pulse 1.4s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.35; transform: scale(0.65); }
+  }
+
+  .track-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    line-height: 1.25;
+  }
+
+  .track-artist {
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ---------- PROGRESS ---------- */
+  .progress-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .time {
+    font-size: 10px;
+    color: rgba(255,255,255,0.38);
+    min-width: 28px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .time.right { text-align: right; }
+
+  .bar-bg {
+    flex: 1;
+    height: 3px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #a855f7, #d8b4fe);
+    border-radius: 99px;
+    width: 0%;
+    transition: width 1s linear;
+  }
+
+  /* ---------- BARS ---------- */
+  .bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  .b {
+    width: 3px;
+    background: #a855f7;
+    border-radius: 2px;
+    animation: ba 0.75s ease-in-out infinite alternate;
+  }
+
+  .b:nth-child(1) { animation-delay: 0s; }
+  .b:nth-child(2) { animation-delay: 0.15s; }
+  .b:nth-child(3) { animation-delay: 0.3s; }
+  .b:nth-child(4) { animation-delay: 0.45s; }
+
+  @keyframes ba {
+    from { height: 3px; }
+    to   { height: 12px; }
+  }
+
+  /* ---------- HIDDEN when nothing plays ---------- */
+  .widget.hidden { opacity: 0; pointer-events: none; }
+</style>
+</head>
+<body>
+
+<div class="widget" id="widget">
+  <div class="cover-wrap">
+    <div class="cover" id="cover">
+      <span class="cover-icon">♪</span>
+      <img id="cover-img" alt="cover" />
+    </div>
+    <div class="tidal-badge">
+      <svg viewBox="0 0 24 24"><path d="M12 3L6 9l3 3-3 3 6 6 6-6-3-3 3-3z"/></svg>
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="now-playing-tag">
+      <div class="pulse"></div>
+      En lecture sur Tidal
+    </div>
+    <div class="track-title" id="track-title">—</div>
+    <div class="track-artist" id="track-artist">—</div>
+    <div class="progress-row">
+      <span class="time" id="t-cur">0:00</span>
+      <div class="bar-bg"><div class="bar-fill" id="bar-fill"></div></div>
+      <span class="time right" id="t-tot">0:00</span>
+      <div class="bars">
+        <div class="b"></div><div class="b"></div>
+        <div class="b"></div><div class="b"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/*
+  ============================================================
+  CONFIGURATION — modifiez ces variables selon votre setup
+  ============================================================
+
+  OPTION A : Last.fm API (recommandée avec Tidal + scrobbling)
+    1. Activez le scrobbling Tidal → Last.fm dans les paramètres Tidal
+    2. Obtenez une clé API gratuite : https://www.last.fm/api/account/create
+    3. Remplissez LASTFM_KEY et LASTFM_USER ci-dessous
+
+  OPTION B : Fichier texte local (via OBS plugin ou script maison)
+    Créez un fichier now_playing.txt avec le format :
+      Titre de la chanson|Artiste|Durée en secondes|URL image
+    Pointez FILE_PATH vers ce fichier
+
+  OPTION C : Démo manuelle (pour tester sans API)
+    Changez MODE en "demo" et remplissez DEMO_*
+  ============================================================
+*/
+
+const CONFIG = {
+  MODE: "lastfm",          // "lastfm" | "file" | "demo"
+
+  // Option A - Last.fm
+  LASTFM_KEY:  "d92d40469e50105bc27b00635273d03a",
+  LASTFM_USER: "LaShyza",
+  POLL_INTERVAL: 10,       // secondes entre chaque vérification
+
+  // Option B - Fichier texte
+  FILE_PATH: "tidal_now_playing.txt",
+
+  // Option C - Démo
+  DEMO_TITLE:  "Midnight Rain",
+  DEMO_ARTIST: "Taylor Swift",
+  DEMO_DURATION: 212,
+  DEMO_COVER: ""
+};
+
+// ---- État ----
+let state = { title: "", artist: "", duration: 0, elapsed: 0, cover: "" };
+let ticker = null;
+
+// ---- Helpers ----
+function fmt(s) {
+  s = Math.max(0, Math.floor(s));
+  return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+}
+
+function update(title, artist, duration, cover) {
+  state.title    = title;
+  state.artist   = artist;
+  state.duration = duration;
+  state.elapsed  = 0;
+
+  document.getElementById("track-title").textContent  = title  || "—";
+  document.getElementById("track-artist").textContent = artist || "—";
+  document.getElementById("t-tot").textContent = fmt(duration);
+  document.getElementById("t-cur").textContent = "0:00";
+  document.getElementById("bar-fill").style.width = "0%";
+
+  const img = document.getElementById("cover-img");
+  const icon = document.querySelector(".cover-icon");
+  if (cover) {
+    img.src = cover;
+    img.onload = () => { img.classList.add("loaded"); icon.style.display = "none"; };
+    img.onerror = () => { img.classList.remove("loaded"); icon.style.display = ""; };
+  } else {
+    img.classList.remove("loaded");
+    icon.style.display = "";
+  }
+
+  clearInterval(ticker);
+  if (duration > 0) {
+    ticker = setInterval(() => {
+      state.elapsed = Math.min(state.elapsed + 1, state.duration);
+      document.getElementById("t-cur").textContent = fmt(state.elapsed);
+      document.getElementById("bar-fill").style.width =
+        (state.elapsed / state.duration * 100).toFixed(1) + "%";
+    }, 1000);
+  }
+}
+
+// ---- Mode Last.fm ----
+async function pollLastfm() {
+  try {
+    const url = `https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks`
+              + `&user=${CONFIG.LASTFM_USER}&api_key=${CONFIG.LASTFM_KEY}`
+              + `&format=json&limit=1`;
+    const r = await fetch(url);
+    const d = await r.json();
+    const tracks = d?.recenttracks?.track;
+    if (!tracks || !tracks.length) return;
+
+    const t = Array.isArray(tracks) ? tracks[0] : tracks;
+    const isPlaying = t["@attr"]?.nowplaying === "true";
+
+    document.getElementById("widget").classList.toggle("hidden", !isPlaying);
+    if (!isPlaying) return;
+
+    const title  = t.name;
+    const artist = t.artist["#text"] || t.artist.name;
+    const cover  = t.image?.find(i => i.size === "large")?.["#text"] || "";
+    const dur    = parseInt(t.duration) || 200;
+
+    if (title !== state.title || artist !== state.artist) {
+      update(title, artist, dur, cover);
+    }
+  } catch(e) {
+    console.warn("Last.fm error:", e);
+  }
+}
+
+// ---- Mode Fichier ----
+async function pollFile() {
+  try {
+    const r = await fetch(CONFIG.FILE_PATH + "?_=" + Date.now());
+    const txt = await r.text();
+    const [title, artist, dur, cover] = txt.trim().split("|");
+    if (title && title !== state.title) {
+      document.getElementById("widget").classList.remove("hidden");
+      update(title, artist || "", parseInt(dur) || 200, cover || "");
+    }
+  } catch(e) {}
+}
+
+// ---- Démarrage ----
+function init() {
+  if (CONFIG.MODE === "demo") {
+    document.getElementById("widget").classList.remove("hidden");
+    update(CONFIG.DEMO_TITLE, CONFIG.DEMO_ARTIST, CONFIG.DEMO_DURATION, CONFIG.DEMO_COVER);
+    return;
+  }
+
+  if (CONFIG.MODE === "lastfm") {
+    pollLastfm();
+    setInterval(pollLastfm, CONFIG.POLL_INTERVAL * 1000);
+    return;
+  }
+
+  if (CONFIG.MODE === "file") {
+    pollFile();
+    setInterval(pollFile, CONFIG.POLL_INTERVAL * 1000);
+    return;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
